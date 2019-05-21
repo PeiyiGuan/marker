@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <signal.h>
 #include "fork.h"
 
 int was_alarm = 0;
@@ -21,7 +22,7 @@ int main(int argc, char *argv[])
   int fd1_err;
   int fd2_err;
   int fd2_out;
-
+  
   pid_t pid1, pid2, wid;
 
   fd1_test_in = open("test.in", O_RDONLY); //stdin
@@ -34,15 +35,13 @@ int main(int argc, char *argv[])
     printf("Invaliad number of arguments, must be greater than 3\n");
     exit(1);
   }
-
-  /*
-look for -p- seperator and replace it with NULL pointers
-*/
+  
+  /* look for -p- seperator and replace it with NULL pointers s*/
   for (int i = 0; i < argc; i++)
   {
 
-    if (strcmp(argv[i], "-p-") == 0)
-    { // equal 0 if -p- found
+    if (strcmp(argv[i], "-p-") == 0) // strcmp equal 0 if -p- found
+    {
       sep_pos = i;
       argv[i] = NULL;
     }
@@ -72,13 +71,11 @@ look for -p- seperator and replace it with NULL pointers
     // printf("p2 argv %s\n", p2_argv[i]);
   }
 
-  /* create pipes ------------------------ */
+  /* ---------- creating pipe ------------------ */
   if (pipe(fd) < 0)
   {
-    fprintf(stderr, "%s: Error creating pipe: %s\n", argv[0], strerror(errno));
-    exit(1);
+    f_error(argv[0]);
   }
-  /*-------------------------*/
 
   /* First child process forking */
   pid1 = fork();
@@ -90,45 +87,14 @@ look for -p- seperator and replace it with NULL pointers
 
   if (pid1 == 0)
   {
-    /* piping test.in to stdin */
-
-    if (dup2(fd1_test_in, 0) < 0)
-    {
-      // error occurs
-      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
-      exit(1);
-    }
-    /* piping stderr to file test.err1 */
-    if (dup2(fd1_err, 2) < 0)
-    {
-      // error
-      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
-      exit(1);
-    }
-
-    /* piping fd1 stdout to file */
-
-    if (dup2(fd[1], 1) < 0)
-    {
-      // error
-      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
-      exit(1);
-    }
-
-    close(fd1_test_in); // close stdin
-    close(fd[1]);       // close stdout for pid 1
-    close(fd1_err);
-
-    execvp(p1_path, p1_argv);
+    start_child(p1_path, p1_argv, fd1_test_in, fd[1], fd1_err);
     exit(1);
-
-    //  execlp("cat", "cat", (char *)NULL);
   }
 
+  close(fd[1]);
+
   /* --- Second child process --- */
-
   pid2 = fork();
-
   if (pid2 < 0)
   {
     fprintf(stderr, "%s: fork failed: %s\n", p2_path, strerror(errno));
@@ -136,51 +102,32 @@ look for -p- seperator and replace it with NULL pointers
   }
   if (pid2 == 0)
   {
-
-    /* piping to stdin */
-    if (dup2(fd[0], 0) < 0) // connect stdin of program2 to stdin
-    {
-      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
-      exit(1);
-    }
-
-    /* piping stderr to file test.err2 */
-
-    if (dup2(fd2_err, 2) < 0)
-    {
-      // error
-      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
-      exit(1);
-    }
-
-    if (dup2(fd2_out, 1) < 0)
-    {
-      // error
-      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
-      exit(1);
-    }
-    close(fd[0]);
-    close(fd[1]);
-    close(fd2_out);
-    close(fd2_err);
-    execvp(p2_path, p2_argv);
-    exit(1);
+    start_child(p2_path, p2_argv, fd[0], fd2_out, fd2_err);
   }
 
   close(fd[1]);
   close(fd[0]);
 
-  wid = wait(NULL);
-  if (wid == pid1)
-    printf("Process %d (%s) finished\n", wid, p1_path);
-  if (wid == pid2)
-    printf("Process %d (%s) finished\n", wid, p2_path);
+  int status1, status2;
 
-  wid = wait(NULL);
-  if (wid == pid1)
-    printf("Process %d (%s) finished\n", wid, p1_path);
-  if (wid == pid2)
-    printf("Process %d (%s) finished\n", wid, p2_path);
+  waitpid(pid1, &status1, 0);
+
+  if (WIFEXITED(status1))
+  {
+    int exit_status = WEXITSTATUS(status1);
+    printf("Process %d (%s) finished with status %d\n",
+           wid, p1_path, exit_status);
+  }
+
+  waitpid(pid2, &status2, 0);
+
+  if (WIFEXITED(status2))
+  {
+    int exit_status = WEXITSTATUS(status2);
+    printf("Process %d (%s) finished with status %d\n",
+           wid, p2_path, exit_status);
+  }
+
 
   /*
   kill child after 3 seconds

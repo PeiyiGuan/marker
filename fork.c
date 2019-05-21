@@ -11,15 +11,25 @@
 /* This is the handler of the alarm signal. It just updates was_alarm */
 void alrm_handler(int i)
 {
-	printf("inside alarm handler");
+	printf("alrm handler called with signal :%d \n",i);
 }
 
-/* Prints string s using perror and exits. Also checks errno to make */
-/* sure that it is not zero (if it is just prints s followed by newline */
-/* using fprintf to the standard error */
+/* Prints string s using perror and exits. 
+Also checks errno to make sure that it is not zero 
+(if it is just prints s followed by newline 
+using fprintf to the standard error) */
 void f_error(char *s)
 {
-	printf("inside f_error");
+	if(errno!=0){
+		perror(s);
+		exit(1);
+	}else{
+		fprintf(stderr, "%s: Error: %s\n", s, strerror(errno));
+		exit(1);
+	}
+	
+	
+	
 }
 
 /* Creates a child process using fork and a function from the exec family 
@@ -30,26 +40,36 @@ pid_t start_child(const char *path, char *const argv[],
 				  int fdin, int fdout, int fderr)
 {
 
+    /* piping test.in to stdin */
 
-		/* In side child process */		
-		
-		if (dup2(fdout, 1) < 0)
-			{
-				fprintf(stdout, "%s: dup2 failed: %s\n", path, strerror(errno));
-				exit(1);
-			}
-		if (dup2(fderr, 2) < 0)
-			{
-				fprintf(stderr, "%s: stderr failed: %s\n", path, strerror(errno));
-				exit(1);
-			}
-		
-			close(fdin);
-			close(fderr);
-			close(fdout);
-			execvp(path, argv);
-			fprintf(stderr, "%s: execv failed: %s\n", path, strerror(errno));
-			exit(1);
+    if (dup2(fdin, 0) < 0)
+    {
+      // error occurs
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
+    /* piping stderr to file test.err1 */
+    if (dup2(fderr, 2) < 0)
+    {
+      // error
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
 
+    /* piping fd1 stdout to file */
+
+    if (dup2(fdout, 1) < 0)
+    {
+      // error
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
+
+    close(fdin); // close stdin
+    close(fdout);       // close stdout for pid 1
+    close(fderr);
+    execvp(path, argv);
+
+   	exit(1);
 
 }
