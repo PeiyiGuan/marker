@@ -12,6 +12,7 @@
 #include "fork.h"
 
 int was_alarm = 0;
+pid_t p[2];
 
 int main(int argc, char *argv[])
 {
@@ -22,8 +23,11 @@ int main(int argc, char *argv[])
   int fd1_err;
   int fd2_err;
   int fd2_out;
-  
-  pid_t pid1, pid2, wid;
+
+  pid_t wid;
+
+  signal(SIGALRM, alrm_handler);
+  alarm(3);
 
   fd1_test_in = open("test.in", O_RDONLY); //stdin
   fd1_err = open("test.err1", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
@@ -35,7 +39,7 @@ int main(int argc, char *argv[])
     printf("Invaliad number of arguments, must be greater than 3\n");
     exit(1);
   }
-  
+
   /* look for -p- seperator and replace it with NULL pointers s*/
   for (int i = 0; i < argc; i++)
   {
@@ -57,11 +61,11 @@ int main(int argc, char *argv[])
   for (int i = 0; i < p1_argv_size; i++)
   {
     p1_argv[i] = argv[i + 1];
-    printf("p1 argv %s\n", p1_argv[i]);
+    //  printf("p1 argv %s\n", p1_argv[i]);
   }
   /* Second Process argv formatting */
   int p2_argv_size = (argc - sep_pos);
-  printf("p2 size is %d\n", p2_argv_size);
+  //printf("p2 size is %d\n", p2_argv_size);
   char *p2_path = argv[sep_pos + 1];
   char *p2_argv[p2_argv_size];
 
@@ -78,59 +82,36 @@ int main(int argc, char *argv[])
   }
 
   /* First child process forking */
-  pid1 = fork();
-  if (pid1 < 0)
-  {
-    fprintf(stderr, "%s: fork failed: %s\n", p1_path, strerror(errno));
-    exit(1);
-  }
-
-  if (pid1 == 0)
-  {
-    start_child(p1_path, p1_argv, fd1_test_in, fd[1], fd1_err);
-    exit(1);
-  }
-
+  p[0] = start_child(p1_path, p1_argv, fd1_test_in, fd[1], fd1_err);
   close(fd[1]);
+  /*-------------------------------*/
 
   /* --- Second child process --- */
-  pid2 = fork();
-  if (pid2 < 0)
-  {
-    fprintf(stderr, "%s: fork failed: %s\n", p2_path, strerror(errno));
-    exit(1);
-  }
-  if (pid2 == 0)
-  {
-    start_child(p2_path, p2_argv, fd[0], fd2_out, fd2_err);
-  }
+  p[1] = start_child(p2_path, p2_argv, fd[0], fd2_out, fd2_err);
 
   close(fd[1]);
   close(fd[0]);
+  /*-------------------------------*/
 
-  int status1, status2;
+  /* Print finished status */
+  int p1_finish_status, p2_finish_status;
+  int p1_wait_pid = waitpid(p[0], &p1_finish_status, 0);
 
-  waitpid(pid1, &status1, 0);
-
-  if (WIFEXITED(status1))
+  if (WIFEXITED(p1_finish_status))
   {
-    int exit_status = WEXITSTATUS(status1);
+    int exit_status = WEXITSTATUS(p1_finish_status);
     printf("Process %d (%s) finished with status %d\n",
-           wid, p1_path, exit_status);
+           p1_wait_pid, p1_path, exit_status);
   }
 
-  waitpid(pid2, &status2, 0);
+  int p2_wait_pid = waitpid(p[1], &p2_finish_status, 0);
 
-  if (WIFEXITED(status2))
+  if (WIFEXITED(p2_finish_status))
   {
-    int exit_status = WEXITSTATUS(status2);
+    int exit_status = WEXITSTATUS(p2_finish_status);
     printf("Process %d (%s) finished with status %d\n",
-           wid, p2_path, exit_status);
+           exit_status, p2_path, exit_status);
   }
 
-
-  /*
-  kill child after 3 seconds
-  */
   return 0;
 }
