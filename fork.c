@@ -15,6 +15,7 @@ void alrm_handler(int i)
 {
 	was_alarm = 1;
 	int count = 0;
+	printf("Alarm triggered with code %d\n",i);
 	for (int i = 0; i < 2; i++)
 	{
 		kill(p[i], 9);
@@ -68,7 +69,6 @@ pid_t start_child(const char *path, char *const argv[],
 		{
 			printf("waiting.....\n");
 		}
-
 		*/
 
 		/* piping test.in to stdin */
