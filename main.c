@@ -10,36 +10,24 @@
 #include <sys/wait.h>
 #include "fork.h"
 
-
 int was_alarm = 0;
-/*
-kill(2), sigaction(2), wait(2), pipe(2), fork(2), read(2), write(2), open(2), close(2),
-signal(7), errno(3), dup(2), dup2(2)
 
-
-
-/* The main program does much of the work. parses the command line arguments */
-/* sets up the alarm and the alarm signal handler opens the files and pipes */
-/* for redirection etc., invoke start_child, closes files that should be  */
-/* closed, waits for the children to finish and reports their status */
-/* or exits printing a message and kill its children if they do not die */
-/* in time (just the parent exiting may not be enough to kill the children) */
 int main(int argc, char *argv[])
 {
 
   int sep_pos;
-  int fd1[2];
-  int fd2[2];
-pid_t pid1, pid2, wid;
+  int fd[2];
+  int fd1_test_in;
+  int fd1_err;
+  int fd2_err;
+  int fd2_out;
 
-//  fd1[0] = open("test.in",O_RDONLY);
-//  fd1[1] = open("test1.out",O_CREAT | O_APPEND| O_RDWR);
- // fd1[2] = open("test.err1",O_CREAT | O_APPEND| O_RDWR );
-  
- // fd2[1] = open("test.out",O_CREAT| O_APPEND| O_RDWR );
- // fd2[2] = open("test.err2",O_CREAT | O_APPEND| O_RDWR );
+  pid_t pid1, pid2, wid;
 
-  
+  fd1_test_in = open("test.in", O_RDONLY); //stdin
+  fd1_err = open("test.err1", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
+  fd2_err = open("test.err2", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
+  fd2_out = open("test.out", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
 
   if (argc < 3)
   {
@@ -47,6 +35,9 @@ pid_t pid1, pid2, wid;
     exit(1);
   }
 
+  /*
+look for -p- seperator and replace it with NULL pointers
+*/
   for (int i = 0; i < argc; i++)
   {
 
@@ -57,90 +48,139 @@ pid_t pid1, pid2, wid;
     }
   }
 
+  /*--------- formatting argv ---------- */
+
+  /* First Process argv formatting */
   char *p1_path = argv[1];
-  int p1_argv_size = sep_pos - 1;
+  int p1_argv_size = sep_pos;
   char *p1_argv[p1_argv_size];
 
   for (int i = 0; i < p1_argv_size; i++)
   {
-    p1_argv[i] = argv[i + 2];
-    printf("p1 argv %s\n",p1_argv[i]);
+    p1_argv[i] = argv[i + 1];
+    printf("p1 argv %s\n", p1_argv[i]);
   }
-
-  // printf("sep_pos is %d\n", sep_pos);
-  // printf("argc is is %d\n", argc);
-
+  /* Second Process argv formatting */
   int p2_argv_size = (argc - sep_pos);
-   printf("p2 size is %d\n", p2_argv_size);
-  char *p2_path = argv[sep_pos];
+  printf("p2 size is %d\n", p2_argv_size);
+  char *p2_path = argv[sep_pos + 1];
   char *p2_argv[p2_argv_size];
 
-  for (int i = 0; i < p2_argv_size-1; i++)
+  for (int i = 0; i < p2_argv_size; i++)
   {
     p2_argv[i] = argv[sep_pos + i + 1];
-    printf("i is %d\n", i);
-    printf("%s  \n", p2_argv[i]);
+    // printf("p2 argv %s\n", p2_argv[i]);
   }
 
-/*
-create pipes 
-*/
-  // if (pipe(fd1) < 0)
-  // {
-  //   fprintf(stderr, "%s: Error creating pipe: %s\n", argv[0], strerror(errno));
-  //   exit(1);
-  // }
+  /* create pipes ------------------------ */
+  if (pipe(fd) < 0)
+  {
+    fprintf(stderr, "%s: Error creating pipe: %s\n", argv[0], strerror(errno));
+    exit(1);
+  }
+  /*-------------------------*/
 
+  /* First child process forking */
+  pid1 = fork();
+  if (pid1 < 0)
+  {
+    fprintf(stderr, "%s: fork failed: %s\n", p1_path, strerror(errno));
+    exit(1);
+  }
 
+  if (pid1 == 0)
+  {
+    /* piping test.in to stdin */
 
-// pid1 = start_child(p1_path, p1_argv, fd[0], fd[1], fd[2]);  // stdin stdout stderr
+    if (dup2(fd1_test_in, 0) < 0)
+    {
+      // error occurs
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
+    /* piping stderr to file test.err1 */
+    if (dup2(fd1_err, 2) < 0)
+    {
+      // error
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
 
-//   printf("pid returned from first child %d\n",pid1);
+    /* piping fd1 stdout to file */
 
-//   start_child(p2_path, p2_argv, fd[0], fd[1], fd[2]);  // stdin stdout stderr
+    if (dup2(fd[1], 1) < 0)
+    {
+      // error
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
 
-  //pid2 = start_child(p1_path,p1_argv,fd1[0],fd1[1],fd1[2]);
+    close(fd1_test_in); // close stdin
+    close(fd[1]);       // close stdout for pid 1
+    close(fd1_err);
 
-pid1 = fork();
-	if (pid1 < 0)
-		{
-			fprintf(stderr, "%s: fork failed: %s\n",p1_path, strerror(errno));
-			exit(1);
-		}
+    execvp(p1_path, p1_argv);
+    exit(1);
 
-		if (pid1 == 0)
-		{
-   //   start_child(p1_path, p1_argv, fd1[0], fd1[1], fd1[2]);
-      // if (dup2(fd1[2], 2) < 0)
-			// {
-			// 	fprintf(stderr, "%s: stderr failed: %s\n", p1_path, strerror(errno));
-			// 	exit(1);
-			// }
-		
-			// close(fd1[0]);
-			// close(fd1[1]);
-			// close(fd1[2]);
-			execvp(p1_path, p1_argv);
-			fprintf(stderr, "%s: execv failed: %s\n", p1_path, strerror(errno));
-			exit(1);
+    //  execlp("cat", "cat", (char *)NULL);
+  }
 
+  /* --- Second child process --- */
 
-		}
+  pid2 = fork();
 
-    // pid2 = fork();
+  if (pid2 < 0)
+  {
+    fprintf(stderr, "%s: fork failed: %s\n", p2_path, strerror(errno));
+    exit(1);
+  }
+  if (pid2 == 0)
+  {
 
-    // if(pid2 < 0){
-    //     fprintf(stderr, "%s: fork failed: %s\n",p2_path, strerror(errno));
-		// 	  exit(1);
-    //   }
-    //   if(pid2==0){
-    //  //   start_child(p2_path,p2_argv,fd2[0],fd2[1],fd2[2]);
-    //   execvp(p2_path, p2_argv);
-    // }
+    /* piping to stdin */
+    if (dup2(fd[0], 0) < 0) // connect stdin of program2 to stdin
+    {
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
 
+    /* piping stderr to file test.err2 */
 
+    if (dup2(fd2_err, 2) < 0)
+    {
+      // error
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
 
-  wait(NULL);
+    if (dup2(fd2_out, 1) < 0)
+    {
+      // error
+      fprintf(stderr, "%s: dup2 failed: %s\n", argv[0], strerror(errno));
+      exit(1);
+    }
+    close(fd[0]);
+    close(fd[1]);
+    close(fd2_out);
+    close(fd2_err);
+    execvp(p2_path, p2_argv);
+    exit(1);
+  }
+
+  close(fd[1]);
+  close(fd[0]);
+
+  wid = wait(NULL);
+  if (wid == pid1)
+    printf("Process %d (%s) finished\n", wid, p1_path);
+  if (wid == pid2)
+    printf("Process %d (%s) finished\n", wid, p2_path);
+
+  wid = wait(NULL);
+  if (wid == pid1)
+    printf("Process %d (%s) finished\n", wid, p1_path);
+  if (wid == pid2)
+    printf("Process %d (%s) finished\n", wid, p2_path);
 
   /*
   kill child after 3 seconds

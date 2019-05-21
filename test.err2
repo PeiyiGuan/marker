@@ -1,0 +1,2 @@
+wc: illegal option -- z
+usage: wc [-clmw] [file ...]

@@ -26,18 +26,6 @@ void f_error(char *s)
  The standard input output and error are replaced by the last three 
  arguments to implement redirection and piping */
  
-// int processCheck(char *const argv[])
-// {
-// 	if (argv[0] != NULL)
-// 	{
-// 		return 1;
-// 	}
-// 	else
-// 	{
-// 		return 2;
-// 	}
-// }
-
 pid_t start_child(const char *path, char *const argv[],
 				  int fdin, int fdout, int fderr)
 {
