@@ -1,3 +1,6 @@
+/*  Author: Peiyi Guan */
+/*  Student ID : 215328917  */
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -12,7 +15,6 @@
 #include "fork.h"
 
 int was_alarm = 0;
-pid_t p[2];
 
 int main(int argc, char *argv[])
 {
@@ -23,16 +25,18 @@ int main(int argc, char *argv[])
   int fd1_err;
   int fd2_err;
   int fd2_out;
+  pid_t p[2];
 
-  pid_t wid;
+  struct sigaction psa;
+  psa.sa_handler = alrm_handler; 
 
-  signal(SIGALRM, alrm_handler);
+  sigaction(SIGALRM,&psa,0);
   alarm(3);
 
   fd1_test_in = open("test.in", O_RDONLY); //stdin
-  fd1_err = open("test.err1", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
-  fd2_err = open("test.err2", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
-  fd2_out = open("test.out", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR | S_IXUSR);
+  fd1_err = open("test.err1", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR );
+  fd2_err = open("test.err2", O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR );
+  fd2_out = open("test.out", O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR );
 
   if (argc < 3)
   {
@@ -41,13 +45,14 @@ int main(int argc, char *argv[])
   }
 
   /* look for -p- seperator and replace it with NULL pointers s*/
-  for (int i = 0; i < argc; i++)
+  int k;
+  for ( k = 0; k < argc; k++)
   {
 
-    if (strcmp(argv[i], "-p-") == 0) // strcmp equal 0 if -p- found
+    if (strcmp(argv[k], "-p-") == 0) // strcmp equal 0 if -p- found
     {
-      sep_pos = i;
-      argv[i] = NULL;
+      sep_pos = k;
+      argv[k] = NULL;
     }
   }
 
@@ -57,8 +62,8 @@ int main(int argc, char *argv[])
   char *p1_path = argv[1];
   int p1_argv_size = sep_pos;
   char *p1_argv[p1_argv_size];
-
-  for (int i = 0; i < p1_argv_size; i++)
+  int i;
+  for ( i = 0; i < p1_argv_size; i++)
   {
     p1_argv[i] = argv[i + 1];
     //  printf("p1 argv %s\n", p1_argv[i]);
@@ -69,9 +74,10 @@ int main(int argc, char *argv[])
   char *p2_path = argv[sep_pos + 1];
   char *p2_argv[p2_argv_size];
 
-  for (int i = 0; i < p2_argv_size; i++)
+  int j;
+  for ( j = 0; j < p2_argv_size; j++)
   {
-    p2_argv[i] = argv[sep_pos + i + 1];
+    p2_argv[j] = argv[sep_pos + j + 1];
     // printf("p2 argv %s\n", p2_argv[i]);
   }
 
@@ -93,24 +99,41 @@ int main(int argc, char *argv[])
   close(fd[0]);
   /*-------------------------------*/
 
+
+
   /* Print finished status */
   int p1_finish_status, p2_finish_status;
   int p1_wait_pid = waitpid(p[0], &p1_finish_status, 0);
 
+
+  if(p1_wait_pid== -1 && was_alarm ==1 ){
+      kill(p[0],9); 
+      kill(p[1],9);
+      fprintf(stderr, "marker: At least one process did not finish\n");
+      exit(1);
+  }
+
   if (WIFEXITED(p1_finish_status))
   {
     int exit_status = WEXITSTATUS(p1_finish_status);
-    printf("Process %d (%s) finished with status %d\n",
-           p1_wait_pid, p1_path, exit_status);
+    printf("Process %s finished with status %d\n",
+            p1_path, exit_status);
   }
 
+ 
   int p2_wait_pid = waitpid(p[1], &p2_finish_status, 0);
+
+  if(p2_wait_pid== -1 && was_alarm ==1 ){
+    kill(p[1],9);
+    fprintf(stderr, "marker: At least one process did not finish\n");
+    exit(1);
+  }
 
   if (WIFEXITED(p2_finish_status))
   {
     int exit_status = WEXITSTATUS(p2_finish_status);
-    printf("Process %d (%s) finished with status %d\n",
-           exit_status, p2_path, exit_status);
+    printf("Process %s finished with status %d\n",
+           p2_path, exit_status);
   }
 
   return 0;

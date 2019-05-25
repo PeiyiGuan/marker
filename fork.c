@@ -1,3 +1,6 @@
+/*  Author: Peiyi Guan */
+/*  Student ID : 215328917  */
+
 #include <sys/types.h>
 #include <unistd.h>
 #include <signal.h>
@@ -8,24 +11,11 @@
 
 #include "fork.h"
 
-extern pid_t p[2];
-
 /* This is the handler of the alarm signal. It just updates was_alarm */
 void alrm_handler(int i)
 {
 	was_alarm = 1;
-	int count = 0;
 	printf("Alarm triggered with code %d\n",i);
-	for (int i = 0; i < 2; i++)
-	{
-		kill(p[i], 9);
-		count++;
-	}
-
-	if (count > 0)
-	{
-		fprintf(stderr, "marker: At least one process did not finish\n");
-	}
 }
 
 /* Prints string s using perror and exits. 
@@ -67,7 +57,8 @@ pid_t start_child(const char *path, char *const argv[],
 		/*
 		while (1)
 		{
-			printf("waiting.....\n");
+			printf("%s waiting.....\n",path);
+			sleep(1);
 		}
 		*/
 

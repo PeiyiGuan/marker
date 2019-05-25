@@ -1,0 +1,13 @@
+1.
+
+(1). The programs ld.so* find and load the shared objects
+       (shared libraries) needed by a program, prepare the program to run,
+       and then run it.
+(2). The locale-archive files contain the languages used over the system man pages for example. 
+	 This memory-mapping enables reading the file as it's in memory, avoiding system calls used to perform disk-read operations, therefore it can result in much faster access.
+
+(3). 16384 bytes
+
+(4). exit_group does not return anything
+
+
