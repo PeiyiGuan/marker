@@ -1,5 +1,4 @@
 /*  Author: Peiyi Guan */
-/*  Student ID : 215328917  */
 
 #include <stdio.h>
 #include <sys/types.h>
